@@ -493,11 +493,11 @@ func main() {
 	mineAddr := flag.String("addr", "", "Payout address for solo mining")
 	flag.Parse()
 
-	fmt.Println("╔═══════════════════════════════════════════╗")
-	fmt.Println("║       VoidHash CPU Miner  v1.0.0          ║")
-	fmt.Println("║  Algorithm: VoidHash                      ║")
-	fmt.Println("║  https://github.com/VoidHash-Crypto        ║")
-	fmt.Println("╚═══════════════════════════════════════════╝")
+	fmt.Println("╔════════════════════════════════════════════╗")
+	fmt.Println("║         VoidHash CPU Miner  v1.0.0         ║")
+	fmt.Println("║            Algorithm: VoidHash             ║")
+	fmt.Println("║     https://github.com/VoidHash-Crypto     ║")
+	fmt.Println("╚════════════════════════════════════════════╝")
 	fmt.Println()
 
 	runtime.GOMAXPROCS(*threads)
