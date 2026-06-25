@@ -495,7 +495,7 @@ func main() {
 
 	fmt.Println("╔═══════════════════════════════════════════╗")
 	fmt.Println("║       VoidHash CPU Miner  v1.0.0          ║")
-	fmt.Println("║  Algorithm: VoidHash (SHA3-256T)          ║")
+	fmt.Println("║  Algorithm: VoidHash                      ║")
 	fmt.Println("║  https://github.com/VoidHash-Crypto        ║")
 	fmt.Println("╚═══════════════════════════════════════════╝")
 	fmt.Println()
