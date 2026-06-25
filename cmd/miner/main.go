@@ -287,6 +287,50 @@ func rpcCall(host string, port int, user, pass, method string, params interface{
 	return result.Result, nil
 }
 
+// buildCoinbaseTx builds a minimal coinbase transaction.
+func buildCoinbaseTx(addr string, value int64, height int64) []byte {
+	// Height script: OP_PUSH + height bytes
+	heightBytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(heightBytes, uint32(height))
+	// Trim trailing zeros
+	for len(heightBytes) > 1 && heightBytes[len(heightBytes)-1] == 0 {
+		heightBytes = heightBytes[:len(heightBytes)-1]
+	}
+	coinbaseScript := append([]byte{byte(len(heightBytes))}, heightBytes...)
+	coinbaseScript = append(coinbaseScript, []byte("/VoidHash-Miner/")...)
+
+	// Output script: OP_RETURN (unspendable — for testing)
+	// In production this would be a P2PKH script to the miner address
+	outScript := []byte{0x6a} // OP_RETURN
+
+	var tx []byte
+	// Version (4 bytes LE)
+	tx = append(tx, []byte{0x01, 0x00, 0x00, 0x00}...)
+	// Input count (1)
+	tx = append(tx, 0x01)
+	// Prev hash (32 zero bytes)
+	tx = append(tx, make([]byte, 32)...)
+	// Prev index (0xffffffff)
+	tx = append(tx, []byte{0xff, 0xff, 0xff, 0xff}...)
+	// Coinbase script length + script
+	tx = append(tx, byte(len(coinbaseScript)))
+	tx = append(tx, coinbaseScript...)
+	// Sequence
+	tx = append(tx, []byte{0xff, 0xff, 0xff, 0xff}...)
+	// Output count (1)
+	tx = append(tx, 0x01)
+	// Value (8 bytes LE)
+	valBytes := make([]byte, 8)
+	binary.LittleEndian.PutUint64(valBytes, uint64(value))
+	tx = append(tx, valBytes...)
+	// Output script length + script
+	tx = append(tx, byte(len(outScript)))
+	tx = append(tx, outScript...)
+	// Locktime
+	tx = append(tx, []byte{0x00, 0x00, 0x00, 0x00}...)
+	return tx
+}
+
 func runSoloMiner(rpcHost string, rpcPort int, rpcUser, rpcPass, mineAddr string, threads int) {
 	fmt.Printf("[solo] mining to address: %s\n", mineAddr)
 	fmt.Printf("[solo] node: %s:%d\n", rpcHost, rpcPort)
@@ -329,18 +373,19 @@ func runSoloMiner(rpcHost string, rpcPort int, rpcUser, rpcPass, mineAddr string
 		}
 		target, _ := hex.DecodeString(targetHex)
 
-		// Build a minimal header for solo mining
-		// In solo mode we use the full header from the template
+		// Build coinbase transaction first so we can compute merkle root
+		coinbaseTxData := buildCoinbaseTx(mineAddr, tmpl.CoinbaseValue, tmpl.Height)
+		// Merkle root = doubleSHA256(coinbase) since there's only one tx
+		merkleRoot := doubleSHA256(coinbaseTxData)
+
 		prevHash, _ := hex.DecodeString(tmpl.PreviousHash)
-		// Placeholder merkle root (real implementation would build coinbase)
-		merkleRoot := make([]byte, 32)
+		bitsBytes, _ := hex.DecodeString(tmpl.Bits)
 
 		header := make([]byte, 76)
 		binary.LittleEndian.PutUint32(header[0:4], uint32(tmpl.Version))
 		copy(header[4:36], prevHash)
 		copy(header[36:68], merkleRoot)
 		binary.LittleEndian.PutUint32(header[68:72], uint32(tmpl.CurTime))
-		bitsBytes, _ := hex.DecodeString(tmpl.Bits)
 		// bits from RPC is big-endian hex, convert to LE for header
 		if len(bitsBytes) == 4 {
 			header[72] = bitsBytes[3]
@@ -399,7 +444,12 @@ func runSoloMiner(rpcHost string, rpcPort int, rpcUser, rpcPass, mineAddr string
 			copy(fullHeader, header)
 			binary.LittleEndian.PutUint64(fullHeader[76:84], nonce)
 
-			blockHex := hex.EncodeToString(fullHeader)
+			// Assemble full block: header + varint(1) + coinbase tx
+		var blockBuf []byte
+		blockBuf = append(blockBuf, fullHeader...)
+		blockBuf = append(blockBuf, 0x01) // tx count = 1
+		blockBuf = append(blockBuf, coinbaseTxData...)
+		blockHex := hex.EncodeToString(blockBuf)
 			result, err := rpcCall(rpcHost, rpcPort, rpcUser, rpcPass,
 				"submitblock", []interface{}{blockHex})
 			if err != nil {
