@@ -287,6 +287,36 @@ func rpcCall(host string, port int, user, pass, method string, params interface{
 	return result.Result, nil
 }
 
+// addrToP2PKH converts a VoidCoin address to a P2PKH locking script.
+func addrToP2PKH(addr string) []byte {
+	// Base58 decode
+	const alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	n := new(big.Int)
+	base := big.NewInt(58)
+	for _, c := range addr {
+		idx := strings.IndexRune(alphabet, c)
+		if idx < 0 {
+			return []byte{0x6a} // OP_RETURN fallback
+		}
+		n.Mul(n, base)
+		n.Add(n, big.NewInt(int64(idx)))
+	}
+	decoded := n.Bytes()
+	// Pad to 25 bytes (1 version + 20 hash160 + 4 checksum)
+	for len(decoded) < 25 {
+		decoded = append([]byte{0}, decoded...)
+	}
+	if len(decoded) < 21 {
+		return []byte{0x6a}
+	}
+	hash160 := decoded[1:21]
+	// P2PKH: OP_DUP OP_HASH160 OP_DATA_20 <hash160> OP_EQUALVERIFY OP_CHECKSIG
+	script := []byte{0x76, 0xa9, 0x14}
+	script = append(script, hash160...)
+	script = append(script, 0x88, 0xac)
+	return script
+}
+
 // buildCoinbaseTx builds a minimal coinbase transaction.
 func buildCoinbaseTx(addr string, value int64, height int64) []byte {
 	// Height script: OP_PUSH + height bytes
@@ -299,9 +329,9 @@ func buildCoinbaseTx(addr string, value int64, height int64) []byte {
 	coinbaseScript := append([]byte{byte(len(heightBytes))}, heightBytes...)
 	coinbaseScript = append(coinbaseScript, []byte("/VoidHash-Miner/")...)
 
-	// Output script: OP_RETURN (unspendable — for testing)
-	// In production this would be a P2PKH script to the miner address
-	outScript := []byte{0x6a} // OP_RETURN
+	// Output script: P2PKH to miner address
+	// Decode base58check address to get hash160
+	outScript := addrToP2PKH(addr)
 
 	var tx []byte
 	// Version (4 bytes LE)
