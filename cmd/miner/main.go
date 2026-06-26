@@ -573,3 +573,35 @@ func main() {
 	fmt.Printf("[miner] accepted=%d  rejected=%d\n",
 		acceptedShares.Load(), rejectedShares.Load())
 }
+
+// buildBlockHex assembles a complete block in hex for submitblock.
+func buildBlockHex(share ShareResult) string {
+    job := share.Job
+
+    // Rebuild coinbase
+    coinbase := append(job.CoinbaseHead, job.Extranonce1...)
+    coinbase = append(coinbase, share.Extranonce2...)
+    coinbase = append(coinbase, job.CoinbaseTail...)
+
+    // Rebuild merkle root
+    merkleRoot := doubleSHA256(coinbase)
+    for _, branch := range job.MerkleBranch {
+        merkleRoot = doubleSHA256(append(merkleRoot, branch...))
+    }
+
+    // Rebuild header (76 bytes without nonce)
+    header := buildHeader(job, share.Extranonce2)
+
+    // Add nonce (4 bytes LE)
+    nonceBuf := make([]byte, 4)
+    binary.LittleEndian.PutUint32(nonceBuf, uint32(share.Nonce))
+    fullHeader := append(header, nonceBuf...)
+
+    // Block = header(80) + varint(1) + coinbase_tx
+    var block []byte
+    block = append(block, fullHeader...)
+    block = append(block, 0x01) // tx count = 1
+    block = append(block, coinbase...)
+
+    return hex.EncodeToString(block)
+}
