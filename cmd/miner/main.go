@@ -98,12 +98,18 @@ func buildHeader(job *stratum.Job, extranonce2 []byte) []byte {
 	}
 
 	// Assemble header: version(4) + prevhash(32) + merkleroot(32) + time(4) + bits(4) = 76 bytes
+	// Version, Time, Bits come as big-endian from stratum — reverse to little-endian
+	rev := func(b []byte) []byte {
+		r := make([]byte, len(b))
+		for i := range b { r[i] = b[len(b)-1-i] }
+		return r
+	}
 	header := make([]byte, 0, 76)
-	header = append(header, job.Version...)
+	header = append(header, rev(job.Version)...)
 	header = append(header, prevHashBytes...)
 	header = append(header, merkleRoot...)
-	header = append(header, job.Time...)
-	header = append(header, job.Bits...)
+	header = append(header, rev(job.Time)...)
+	header = append(header, rev(job.Bits)...)
 	return header
 }
 
@@ -139,7 +145,7 @@ func mineWorker(
 			binary.LittleEndian.PutUint32(extranonce2, uint32(threadID))
 			header = buildHeader(job, extranonce2)
 			target = job.Target
-			nonce = uint64(rand.Int63())
+			nonce = uint64(rand.Int31()) // 32-bit nonces for pool compatibility
 		default:
 		}
 
@@ -161,9 +167,9 @@ func mineWorker(
 					Nonce:       nonce,
 				}
 				// Start fresh after finding a share
-				nonce = uint64(rand.Int63())
+				nonce = uint64(rand.Int31()) // 32-bit nonces for pool compatibility
 			}
-			nonce++
+			nonce = (nonce + 1) & 0xFFFFFFFF // keep in 32-bit range
 		}
 	}
 }

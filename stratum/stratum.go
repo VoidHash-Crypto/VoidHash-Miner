@@ -141,7 +141,8 @@ func (c *Client) Run() error {
 
 // SubmitShare submits a found share to the pool.
 func (c *Client) SubmitShare(jobID string, extranonce2 []byte, ntime []byte, nonce uint64) error {
-	nonceHex := fmt.Sprintf("%016x", nonce)
+	// Pool expects 32-bit nonce (8 hex chars) - use lower 32 bits
+	nonceHex := fmt.Sprintf("%08x", uint32(nonce))
 	ntimeHex := hex.EncodeToString(ntime)
 	en2Hex := hex.EncodeToString(extranonce2)
 
@@ -358,8 +359,8 @@ func bitsToTarget(bits []byte) []byte {
 	if len(bits) < 4 {
 		return make([]byte, 32)
 	}
-	// bits is little-endian from the wire
-	compact := uint32(bits[0]) | uint32(bits[1])<<8 | uint32(bits[2])<<16 | uint32(bits[3])<<24
+	// bits from pool notify is big-endian hex string decoded
+	compact := uint32(bits[0])<<24 | uint32(bits[1])<<16 | uint32(bits[2])<<8 | uint32(bits[3])
 	exp := compact >> 24
 	mant := compact & 0x007fffff
 
