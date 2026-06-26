@@ -207,8 +207,12 @@ func runPoolMiner(poolAddr, worker, password string, threads int) {
 
 	// Job distributor
 	client.OnJob = func(job *stratum.Job) {
-		fmt.Printf("[job] new job %s  bits=%s  clean=%v\n",
-			job.ID, hex.EncodeToString(job.Bits), job.CleanJobs)
+		// Override job target with pool-set target if available
+		if len(client.PoolTarget) == 32 {
+			job.Target = client.PoolTarget
+		}
+		fmt.Printf("[job] new job %s  bits=%s  clean=%v  target=%x\n",
+			job.ID, hex.EncodeToString(job.Bits), job.CleanJobs, job.Target[:8])
 		for _, ch := range jobCh {
 			select {
 			case ch <- job:

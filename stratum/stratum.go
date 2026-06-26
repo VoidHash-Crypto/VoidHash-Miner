@@ -64,6 +64,7 @@ type Client struct {
 	Extranonce1    []byte
 	Extranonce2Len int
 	Difficulty     float64
+	PoolTarget     []byte  // 32-byte target from mining.set_target
 	CurrentJob     *Job
 	jobMu          sync.RWMutex
 
@@ -327,6 +328,21 @@ func (c *Client) handleSetDifficulty(params []json.RawMessage) error {
 	json.Unmarshal(params[0], &diff)
 	c.Difficulty = diff
 	fmt.Printf("[stratum] difficulty set to %g\n", diff)
+	return nil
+}
+
+func (c *Client) handleSetTarget(params []json.RawMessage) error {
+	if len(params) == 0 {
+		return nil
+	}
+	var targetHex string
+	json.Unmarshal(params[0], &targetHex)
+	target, err := hex.DecodeString(targetHex)
+	if err != nil || len(target) != 32 {
+		return nil
+	}
+	c.PoolTarget = target
+	fmt.Printf("[stratum] pool target set: %s\n", targetHex[:16]+"...")
 	return nil
 }
 
