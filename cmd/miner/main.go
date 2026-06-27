@@ -7,7 +7,7 @@
 //
 // Flags:
 //
-//	-pool       Pool stratum address (default: stratum+tcp://pool.voidcoin.network:3532)
+//	-pool       Pool stratum address (default: stratum+tcp://stratum.ledgerock.crypto-eire.com:3055)
 //	-user       Worker name / payout address
 //	-pass       Worker password (default: x)
 //	-threads    Number of CPU threads (default: all cores)
@@ -176,7 +176,7 @@ func mineWorker(
 
 // ── Pool mining ───────────────────────────────────────────────────────────────
 
-func runPoolMiner(poolAddr, worker, password string, threads int) {
+func runPoolMiner(poolAddr, worker, password string, threads int, nodeHost string, nodePort int, nodeUser, nodePass string) {
 	// Strip stratum+tcp:// prefix
 	addr := strings.TrimPrefix(poolAddr, "stratum+tcp://")
 
@@ -240,6 +240,25 @@ func runPoolMiner(poolAddr, worker, password string, threads int) {
 			} else {
 				acceptedShares.Add(1)
 				fmt.Printf("[share] ✓ accepted\n")
+				// Submit block directly to node
+				fmt.Printf("[node] attempting submitblock...\n")
+				s := share
+				h, po, u, pa := nodeHost, nodePort, nodeUser, nodePass
+				go func() {
+					blockHex := buildBlockHex(s)
+					if blockHex == "" {
+						fmt.Printf("[node] buildBlockHex returned empty\n")
+						return
+					}
+					result, err := rpcCall(h, po, u, pa, "submitblock", []interface{}{blockHex})
+					if err != nil {
+						fmt.Printf("[node] submitblock error: %v\n", err)
+					} else if result != nil {
+						fmt.Printf("[node] submitblock result: %s\n", result)
+					} else {
+						fmt.Printf("[node] block accepted!\n")
+					}
+				}()
 			}
 		}
 	}()
@@ -521,7 +540,7 @@ func runSoloMiner(rpcHost string, rpcPort int, rpcUser, rpcPass, mineAddr string
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 func main() {
-	pool     := flag.String("pool", "stratum+tcp://pool.voidcoin.network:3532", "Pool stratum address")
+	pool     := flag.String("pool", "stratum+tcp://stratum.ledgerock.crypto-eire.com:3055", "Pool stratum address")
 	user     := flag.String("user", "", "Worker name / payout address (required)")
 	pass     := flag.String("pass", "x", "Worker password")
 	threads  := flag.Int("threads", runtime.NumCPU(), "Number of CPU mining threads")
@@ -558,7 +577,7 @@ func main() {
 			fmt.Fprintln(os.Stderr, "usage: voidhash-miner -user YOUR_VOID_ADDRESS -pool stratum+tcp://pool:3532")
 			os.Exit(1)
 		}
-		go runPoolMiner(*pool, *user, *pass, *threads)
+		go runPoolMiner(*pool, *user, *pass, *threads, *rpcHost, *rpcPort, *rpcUser, *rpcPass)
 	}
 
 	// Wait for signal
